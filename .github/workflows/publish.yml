@@ -19,7 +19,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Verify tag version
         run: |
-          VERSION="$(node -p \"require('./package.json').version\")"
+          VERSION="$(node -p 'require("./package.json").version')"
           test "v$VERSION" = "$GITHUB_REF_NAME"
       - run: npm run check
       - name: Validate Codegen contract
