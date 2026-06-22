@@ -17,6 +17,8 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - name: Authenticate with npm
+        run: npm config set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
       - name: Verify tag version
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
