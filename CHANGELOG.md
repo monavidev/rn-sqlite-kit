@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+- Automated CI/CD with GitHub Actions.
+- Simplified release workflow: push tag → npm publish automatic.
+- Improved build consistency and deployment reliability.
+- Continuous integration tests on every pull request.
+
 ## 1.1.0
 
 - Published on npm as `rn-sqlite-kit`.
