@@ -17,8 +17,6 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - name: Authenticate with npm
-        run: npm config set //registry.npmjs.org/:_authToken ${{ secrets.NPM_TOKEN }}
       - name: Verify tag version
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
@@ -30,3 +28,5 @@ jobs:
           node ./node_modules/react-native/scripts/generate-codegen-artifacts.js \
             -p . -t all -o ./codegen-output -s library
       - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
