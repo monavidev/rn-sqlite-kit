@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  package-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run check
+
+  codegen-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # This is CI-only validation of the host peer dependency. It is not added
+      # to this package's dependencies or shipped to consumers.
+      - run: npm install --ignore-scripts --no-save react-native@0.81.5
+      - run: >-
+          node ./node_modules/react-native/scripts/generate-codegen-artifacts.js
+          -p . -t all -o ./codegen-output -s library
+      - run: test -d ./codegen-output

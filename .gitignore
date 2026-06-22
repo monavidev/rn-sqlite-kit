@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+coverage/
+*.log
+android/.gradle/
+android/build/
+example/node_modules/
+example/android/.gradle/
+example/android/build/
+example/ios/Pods/
+example/ios/build/

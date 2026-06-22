@@ -1,6 +1,6 @@
 {
   "name": "rn-sqlite-kit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A dependency-free SQLite TurboModule for React Native iOS and Android.",
   "keywords": [
     "react-native",
@@ -9,13 +9,13 @@
     "offline",
     "turbo-module"
   ],
-  "homepage": "https://github.com/monavidev/react-native-sqlite-kit#readme",
+  "homepage": "https://github.com/monavidev/rn-sqlite-kit#readme",
   "bugs": {
-    "url": "https://github.com/monavidev/react-native-sqlite-kit/issues"
+    "url": "https://github.com/monavidev/rn-sqlite-kit/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/monavidev/react-native-sqlite-kit.git"
+    "url": "git+https://github.com/monavidev/rn-sqlite-kit.git"
   },
   "license": "MIT",
   "author": "Nattawat Virunsuntornkul",
