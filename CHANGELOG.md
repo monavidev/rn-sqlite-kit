@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+- Fixed package name in README from `react-native-sqlite-kit` to `rn-sqlite-kit`.
+- Improved documentation clarity and installation instructions.
+- Removed duplicate title in README.
+
 ## 1.2.0
 
 - Automated CI/CD with GitHub Actions.

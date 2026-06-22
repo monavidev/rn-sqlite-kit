@@ -1,4 +1,4 @@
-# react-native-sqlite-kit
+# rn-sqlite-kit
 
 A production-oriented SQLite native module for React Native iOS and Android.
 
@@ -22,7 +22,7 @@ It does **not** use `react-native-sqlite-storage`, `expo-sqlite`, `react-native-
 ## Install
 
 ```bash
-npm install react-native-sqlite-kit
+npm install rn-sqlite-kit
 ```
 
 For iOS:
@@ -191,4 +191,3 @@ The `v*` tag triggers npm publish with provenance.
 ## License
 
 MIT © Nattawat Virunsuntornkul
-# react-native-sqlite-kit
