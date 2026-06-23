@@ -12,11 +12,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
       - name: Verify tag version
         run: |
           VERSION="$(node -p 'require("./package.json").version')"
@@ -27,6 +28,4 @@ jobs:
           npm install --ignore-scripts --no-save react-native@0.81.5
           node ./node_modules/react-native/scripts/generate-codegen-artifacts.js \
             -p . -t all -o ./codegen-output -s library
-      - run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish
