@@ -36,6 +36,18 @@ test('rejects parameter count mismatches and unsupported placeholder styles', ()
   );
 });
 
+test('rejects multiple statements before calling the native module', () => {
+  assert.doesNotThrow(() => assertSqlAndParameters('SELECT 1;', []));
+  assert.throws(
+    () => assertSqlAndParameters('SELECT 1; SELECT 2', []),
+    /exactly one SQL statement/,
+  );
+  assert.throws(
+    () => assertSqlAndParameters(';', []),
+    /exactly one SQL statement/,
+  );
+});
+
 test('accepts validated BLOB parameters and rejects malformed base64', () => {
   assert.doesNotThrow(() =>
     assertSqlAndParameters('INSERT INTO files(data) VALUES (?)', [

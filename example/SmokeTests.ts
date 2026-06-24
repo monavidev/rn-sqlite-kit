@@ -1,4 +1,4 @@
-import { blob, SQLite } from 'react-native-sqlite-kit';
+import { blob, SQLite } from 'rn-sqlite-kit';
 
 export type SmokeTestResult = Readonly<{
   name: string;

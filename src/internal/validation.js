@@ -17,6 +17,7 @@ function assertSqlAndParameters(sql, params) {
     throw new TypeError('SQL parameters must be an array.');
   }
 
+  assertSingleStatement(sql);
   const placeholders = countPositionalPlaceholders(sql);
   if (placeholders !== params.length) {
     throw new TypeError(
@@ -25,6 +26,73 @@ function assertSqlAndParameters(sql, params) {
   }
 
   params.forEach((value, index) => assertParameter(value, `params[${index}]`));
+}
+
+/**
+ * Rejects batches at the JavaScript boundary so callers receive a clear error
+ * before native work begins. A single trailing semicolon is accepted;
+ * additional SQL after it is not.
+ */
+function assertSingleStatement(sql) {
+  let hasContent = false;
+  let index = 0;
+  let terminated = false;
+
+  while (index < sql.length) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (char === '-' && next === '-') {
+      index = consumeLineComment(sql, index + 2);
+      continue;
+    }
+
+    if (char === '/' && next === '*') {
+      index = consumeBlockComment(sql, index + 2);
+      continue;
+    }
+
+    if (terminated) {
+      throw new TypeError(
+        'execute accepts exactly one SQL statement. Use transaction for a batch.',
+      );
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      hasContent = true;
+      index = consumeQuoted(sql, index, char);
+      continue;
+    }
+
+    if (char === '[') {
+      hasContent = true;
+      index = consumeBracketIdentifier(sql, index);
+      continue;
+    }
+
+    if (char === ';') {
+      if (!hasContent) {
+        throw new TypeError(
+          'execute accepts exactly one SQL statement. Use transaction for a batch.',
+        );
+      }
+      terminated = true;
+      index += 1;
+      continue;
+    }
+
+    hasContent = true;
+    index += 1;
+  }
+
+  if (!hasContent) {
+    throw new TypeError('SQL must be a non-empty string.');
+  }
 }
 
 function assertStatements(statements) {
@@ -163,5 +231,6 @@ module.exports = {
   assertSqlAndParameters,
   assertStatements,
   assertParameter,
+  assertSingleStatement,
   countPositionalPlaceholders,
 };

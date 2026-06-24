@@ -66,3 +66,27 @@ test('public API rejects operations after close and invalid native contracts', a
   await db.close();
   await assert.rejects(() => db.execute('SELECT 1'), /is closed/);
 });
+
+test('public API rejects new work while a database is closing', async () => {
+  let finishClosing;
+  const kit = createSQLiteKit({
+    async open() { return 'c'; },
+    close() {
+      return new Promise((resolve) => {
+        finishClosing = () => resolve(true);
+      });
+    },
+    async deleteDatabase() { return true; },
+    async execute() {
+      return JSON.stringify({ rows: [], rowsAffected: 0, insertId: null });
+    },
+    async executeBatch() { return '[]'; },
+  });
+
+  const db = await kit.SQLite.open({ name: 'closing.db' });
+  const closing = db.close();
+
+  await assert.rejects(() => db.execute('SELECT 1'), /is closed/);
+  finishClosing();
+  await closing;
+});

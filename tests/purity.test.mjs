@@ -34,3 +34,15 @@ test('native code uses operating-system SQLite APIs directly', async () => {
     assert.doesNotMatch(android + ios, new RegExp(banned, 'i'));
   }
 });
+
+test('documentation and package metadata use the published package identity', async () => {
+  const [readme, smokeTests, podspec] = await Promise.all([
+    readFile(join(root, 'README.md'), 'utf8'),
+    readFile(join(root, 'example/SmokeTests.ts'), 'utf8'),
+    readFile(join(root, 'react-native-sqlite-kit.podspec'), 'utf8'),
+  ]);
+
+  assert.match(readme, /from 'rn-sqlite-kit'/);
+  assert.match(smokeTests, /from 'rn-sqlite-kit'/);
+  assert.match(podspec, /github\.com\/monavidev\/rn-sqlite-kit\.git/);
+});

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.3 - 2026-06-24
+
+- Reject new database work as soon as a connection starts closing.
+- Reject multiple SQL statements at the JavaScript boundary.
+- Safely decode result columns with special names such as `__proto__`.
+- Correct package imports and the repository URL in CocoaPods metadata.
+- Refresh the README with clearer setup, API, type, and constraint documentation.
+
+## 1.2.2 - 2026-06-23
+
+- Bumped the package version for publication.
+
 ## 1.2.1
 
 - Fixed package name in README from `react-native-sqlite-kit` to `rn-sqlite-kit`.

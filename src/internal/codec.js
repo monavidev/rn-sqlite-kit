@@ -27,7 +27,14 @@ function parseRow(value) {
     if (!isCell(cell)) {
       throw new TypeError(`Native SQLite result included an invalid value for column "${key}".`);
     }
-    row[key] = cell;
+    // defineProperty preserves legitimate SQLite aliases such as "__proto__"
+    // without invoking Object.prototype's legacy setter.
+    Object.defineProperty(row, key, {
+      configurable: true,
+      enumerable: true,
+      value: cell,
+      writable: true,
+    });
   }
   return row;
 }
@@ -55,27 +62,30 @@ function parseResult(value) {
 }
 
 function decodeResult(serialized) {
-  let parsed;
-  try {
-    parsed = JSON.parse(serialized);
-  } catch {
-    throw new TypeError('Native SQLite returned malformed JSON.');
-  }
-  return parseResult(parsed);
+  return parseResult(parseSerialized(serialized));
 }
 
 function decodeBatchResult(serialized) {
-  let parsed;
-  try {
-    parsed = JSON.parse(serialized);
-  } catch {
-    throw new TypeError('Native SQLite returned malformed JSON.');
-  }
+  const parsed = parseSerialized(serialized);
 
   if (!Array.isArray(parsed)) {
     throw new TypeError('Native SQLite batch result is not an array.');
   }
   return parsed.map(parseResult);
+}
+
+function parseSerialized(serialized) {
+  if (typeof serialized !== 'string') {
+    throw new TypeError('Native SQLite returned malformed JSON.');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(serialized);
+  } catch {
+    throw new TypeError('Native SQLite returned malformed JSON.');
+  }
+  return parsed;
 }
 
 module.exports = {

@@ -1,93 +1,100 @@
 # rn-sqlite-kit
 
-A production-oriented SQLite native module for React Native iOS and Android.
+[![npm](https://img.shields.io/npm/v/rn-sqlite-kit.svg)](https://www.npmjs.com/package/rn-sqlite-kit)
+[![CI](https://github.com/monavidev/rn-sqlite-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/monavidev/rn-sqlite-kit/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/rn-sqlite-kit.svg)](LICENSE)
 
-It has **no npm runtime dependencies and no npm development dependencies**. The package directly uses:
+A small, dependency-free SQLite TurboModule for React Native on iOS and Android.
 
-- Android: `android.database.sqlite.SQLiteDatabase`
-- iOS: Apple system `libsqlite3` via `<sqlite3.h>`
-- React Native: only the host app's `react-native` peer dependency and its built-in Codegen/TurboModule support
+It uses the SQLite implementation already provided by each operating system—`android.database.sqlite.SQLiteDatabase` on Android and `libsqlite3` on iOS—so there is no bundled database engine, ORM, or third-party runtime.
 
-It does **not** use `react-native-sqlite-storage`, `expo-sqlite`, `react-native-quick-sqlite`, WatermelonDB, SQLCipher, a JSI bridge package, or an ORM.
+> [!IMPORTANT]
+> `rn-sqlite-kit` requires React Native's New Architecture.
 
-> “No other npm” does not mean reimplementing the SQLite database engine. SQLite itself comes with iOS/Android. This library owns the JavaScript API and all Android/iOS bridge code; the operating system owns the proven database engine.
+## Highlights
+
+| Feature | What you get |
+| --- | --- |
+| **Zero npm dependencies** | No runtime or development packages are added to the library. |
+| **Native on both platforms** | Direct Android SQLite and Apple `libsqlite3` implementations. |
+| **Off the JS thread** | Database work runs on a native serial worker queue. |
+| **Transactions** | Execute a batch atomically with automatic rollback on failure. |
+| **Typed API** | TypeScript declarations ship with the package. |
+| **BLOB support** | Portable base64 values work consistently across iOS and Android. |
+
+Every database is app-private and opens with foreign keys enabled, write-ahead logging (WAL), and a five-second busy timeout.
 
 ## Requirements
 
-- React Native `>= 0.79`
-- New Architecture enabled
-- Android minSdk supplied by the consuming React Native app (tested target: API 24+)
-- iOS deployment target compatible with the app (podspec baseline: iOS 13.4)
+| Platform | Requirement |
+| --- | --- |
+| React Native | `>= 0.79` with New Architecture enabled |
+| Android | The consuming app supplies `minSdk` (tested on API 24+) |
+| iOS | iOS 13.4+ |
 
-## Install
+## Installation
 
 ```bash
 npm install rn-sqlite-kit
 ```
 
-For iOS:
+React Native autolinking handles the native module. Install CocoaPods after adding the package on iOS:
 
 ```bash
-cd ios
-pod install
+cd ios && pod install
 ```
-
-## What the module configures
-
-Each app-private database is opened with:
-
-- foreign-key enforcement enabled
-- write-ahead logging (WAL) enabled
-- a 5-second SQLite busy timeout
-- one native serial worker queue per JS module instance, so database work does not run on the JS thread
-
-Database names are file names only. Paths such as `../data.db` are rejected deliberately; files always live in the app's private database storage.
 
 ## Quick start
 
 ```ts
-import { SQLite, blob } from 'react-native-sqlite-kit';
+import { blob, SQLite } from 'rn-sqlite-kit';
 
 const db = await SQLite.open({ name: 'inventory.db' });
 
-await db.execute(`
-  CREATE TABLE IF NOT EXISTS products (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 0,
-    photo BLOB
-  )
-`);
+try {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS products (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 0,
+      photo BLOB
+    )
+  `);
 
-const inserted = await db.execute(
-  'INSERT INTO products (name, quantity, photo) VALUES (?, ?, ?)',
-  ['Keyboard', 12, blob('AQIDBA==')],
-);
+  const inserted = await db.execute(
+    'INSERT INTO products (name, quantity, photo) VALUES (?, ?, ?)',
+    ['Keyboard', 12, blob('AQIDBA==')],
+  );
 
-const products = await db.execute(
-  'SELECT id, name, quantity, photo FROM products WHERE quantity > ?',
-  [0],
-);
+  const result = await db.execute(
+    'SELECT id, name, quantity, photo FROM products WHERE quantity > ?',
+    [0],
+  );
 
-console.log(inserted.insertId);
-console.log(products.rows);
-
-await db.close();
+  console.log('Inserted row:', inserted.insertId);
+  console.log('Products:', result.rows);
+} finally {
+  await db.close();
+}
 ```
+
+Database names are file names, not paths. Values such as `../data.db` are deliberately rejected so files stay inside the app's private database directory.
 
 ## API
 
-### `SQLite.open({ name })`
+### `SQLite.open(options)`
 
-Opens an app-private file and returns a `SQLiteDatabase` handle. Calls that open the same name share one native database handle, while each JavaScript object retains its own logical connection ID.
+Opens a database and returns a `SQLiteDatabase` handle.
 
 ```ts
 const db = await SQLite.open({ name: 'app.db' });
 ```
 
+Opening the same name more than once shares its native database while keeping separate logical connections. The name must be 1–128 letters, numbers, dots, underscores, or hyphens, and cannot start with a dot.
+
 ### `db.execute(sql, params?)`
 
-Runs exactly **one** SQL statement. Use unnumbered positional `?` placeholders only; a parameter count mismatch throws before native execution.
+Executes exactly one SQL statement using unnumbered positional `?` placeholders.
 
 ```ts
 const result = await db.execute(
@@ -98,22 +105,24 @@ const result = await db.execute(
 console.log(result.rowsAffected);
 ```
 
-Result shape:
+Each call resolves to:
 
 ```ts
-{
+type SqliteResult = Readonly<{
   rows: Array<Record<string, string | number | null | SqliteBlob>>;
   rowsAffected: number;
   insertId: number | null;
-}
+}>;
 ```
+
+The parameter count and supported value types are validated before native execution.
 
 ### `db.transaction(statements)`
 
-Runs a batch atomically. On failure, every statement in the batch is rolled back.
+Executes statements in order and returns one result per statement. The entire batch is rolled back if any statement fails.
 
 ```ts
-await db.transaction([
+const results = await db.transaction([
   {
     sql: 'UPDATE products SET quantity = quantity - ? WHERE id = ?',
     params: [1, 42],
@@ -127,11 +136,11 @@ await db.transaction([
 
 ### `db.close()`
 
-Closes this logical connection. It is safe to call more than once.
+Closes the logical connection. Calling `close()` more than once is safe. New operations are rejected as soon as closing begins.
 
 ### `SQLite.deleteDatabase(name)`
 
-Closes all known logical connections to the named database and deletes the main database, WAL, and shared-memory files.
+Closes every native connection for the given name and removes the database, WAL, and shared-memory files.
 
 ```ts
 await SQLite.deleteDatabase('inventory.db');
@@ -139,54 +148,52 @@ await SQLite.deleteDatabase('inventory.db');
 
 ### `blob(base64)`
 
-Builds a BLOB parameter. BLOB columns return the same portable representation.
+Creates a validated BLOB parameter. BLOB columns use the same representation when read:
 
 ```ts
-const attachment = blob('AQIDBA==');
-await db.execute('INSERT INTO files (contents) VALUES (?)', [attachment]);
+const contents = blob('AQIDBA==');
+await db.execute('INSERT INTO files (contents) VALUES (?)', [contents]);
 ```
 
-## Intentional v1 constraints
+```ts
+type SqliteBlob = Readonly<{
+  type: 'blob';
+  base64: string;
+}>;
+```
 
-- Only positional `?` parameters are supported. Named parameters (`:name`, `@name`, `$name`) and numbered parameters (`?1`) are rejected.
-- `execute` accepts one statement. Use `transaction` for a batch.
-- Do not rely on `INSERT ... RETURNING` / `UPDATE ... RETURNING`; Android system SQLite versions vary. Use a normal mutation followed by `SELECT` when needed.
-- SQLite stores booleans as integers; `true` / `false` are written as `1` / `0` and read back as numbers.
-- JavaScript cannot represent every 64-bit SQLite integer exactly. Keep IDs and integer values within `Number.MAX_SAFE_INTEGER` when exact precision matters.
-- This package does not provide encryption, an ORM, schema migrations, database sync, web support, or a custom SQLite engine.
+## Supported parameter values
 
-## Quality gates
+| JavaScript value | SQLite value |
+| --- | --- |
+| `string` | `TEXT` |
+| finite `number` | `INTEGER` or `REAL` |
+| `boolean` | `INTEGER` (`1` or `0`) |
+| `null` | `NULL` |
+| `blob(base64)` | `BLOB` |
 
-The repository uses no test framework package. Unit tests run with Node's built-in test runner:
+SQLite booleans are returned as numbers. JavaScript also cannot precisely represent every 64-bit SQLite integer, so keep exact IDs within `Number.MAX_SAFE_INTEGER`.
+
+## Intentional constraints
+
+- Only unnumbered positional `?` parameters are supported. Named parameters (`:name`, `@name`, `$name`) and numbered parameters (`?1`) are rejected.
+- `execute` accepts one statement; use `transaction` for a batch.
+- Avoid relying on `INSERT ... RETURNING` or `UPDATE ... RETURNING` because Android system SQLite versions vary.
+- Encryption, migrations, sync, web support, schema modeling, and ORM features are outside this package's scope.
+- SQLite is supplied by iOS and Android; this package does not bundle a custom SQLite build or SQLCipher.
+
+## Development
+
+The test suite uses Node's built-in test runner and keeps the project dependency-free:
 
 ```bash
 npm test
 npm run check
 ```
 
-`npm run check` verifies JavaScript syntax, validation/result decoding, the zero-dependency manifest, direct native SQLite imports, and the publish file list.
+`npm run check` validates JavaScript syntax, public API behavior, result decoding, package purity, and the npm publish file list. Native changes should also pass the smoke-test screen in [`example`](example) on both Android and iOS.
 
-`example/App.tsx` plus `example/SmokeTests.ts` is a native smoke-test screen. Before publishing a release, copy it into a bare React Native test app and run it on Android and iOS. It verifies:
-
-1. table creation
-2. positional binding
-3. BLOB round-trip
-4. committed reads
-5. transaction rollback
-
-## Publish a production release
-
-1. Run `npm run check`.
-2. Run the native smoke-test screen on Android and iOS.
-3. Configure npm Trusted Publisher for this GitHub repository and `.github/workflows/publish.yml`.
-4. Release:
-
-```bash
-npm version patch
-git push origin main --follow-tags
-```
-
-The `v*` tag triggers npm publish with provenance.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ## License
 

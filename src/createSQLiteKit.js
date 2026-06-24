@@ -1,9 +1,18 @@
 const { decodeBatchResult, decodeResult } = require('./internal/codec');
 const {
   assertDatabaseName,
+  assertParameter,
   assertSqlAndParameters,
   assertStatements,
 } = require('./internal/validation');
+
+const REQUIRED_NATIVE_METHODS = [
+  'open',
+  'close',
+  'deleteDatabase',
+  'execute',
+  'executeBatch',
+];
 
 /**
  * Builds the public API around a native module. Kept separate from the React
@@ -14,7 +23,7 @@ function createSQLiteKit(nativeModule) {
     throw new TypeError('ReactNativeSqliteKit native module is unavailable.');
   }
 
-  for (const method of ['open', 'close', 'deleteDatabase', 'execute', 'executeBatch']) {
+  for (const method of REQUIRED_NATIVE_METHODS) {
     if (typeof nativeModule[method] !== 'function') {
       throw new TypeError(`ReactNativeSqliteKit native module is missing ${method}().`);
     }
@@ -22,7 +31,7 @@ function createSQLiteKit(nativeModule) {
 
   function blob(base64) {
     const value = { type: 'blob', base64 };
-    assertSqlAndParameters('SELECT ?', [value]);
+    assertParameter(value, 'blob(base64)');
     return Object.freeze(value);
   }
 
@@ -83,7 +92,7 @@ function createSQLiteKit(nativeModule) {
     }
 
     #assertOpen() {
-      if (this.#closed) {
+      if (this.#closed || this.#closing) {
         throw new Error(`SQLite database "${this.name}" is closed.`);
       }
     }

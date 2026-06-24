@@ -48,3 +48,17 @@ test('decodeResult rejects non-finite values from a corrupted native result', ()
     /invalid insertId/,
   );
 });
+
+test('decodeResult safely preserves special SQLite column aliases', () => {
+  const result = decodeResult(
+    '{"rows":[{"__proto__":"safe"}],"rowsAffected":0,"insertId":null}',
+  );
+
+  assert.equal(Object.hasOwn(result.rows[0], '__proto__'), true);
+  assert.equal(result.rows[0].__proto__, 'safe');
+  assert.equal(Object.getPrototypeOf(result.rows[0]), Object.prototype);
+});
+
+test('decodeResult rejects non-string native payloads', () => {
+  assert.throws(() => decodeResult({}), /malformed JSON/);
+});

@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.license = package['license']
   s.authors = package['author']
   s.platforms = { :ios => '13.4' }
-  s.source = { :git => 'https://github.com/monavidev/react-native-sqlite-kit.git', :tag => "v#{s.version}" }
+  s.source = { :git => 'https://github.com/monavidev/rn-sqlite-kit.git', :tag => "v#{s.version}" }
   s.source_files = 'ios/**/*.{h,m,mm}'
   s.public_header_files = 'ios/**/*.h'
   s.libraries = 'sqlite3'
