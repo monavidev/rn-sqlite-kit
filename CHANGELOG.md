@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.4 - 2026-06-27
+
+- Allow single `CREATE TRIGGER ... BEGIN ...; ... END` statements through JavaScript and Android validation.
+- Remove the stale Android generated spec import that breaks React Native 0.83 codegen builds.
+- Pass an empty edit table to Android `rawQueryWithFactory` for newer AndroidX/RN toolchains.
+
 ## 1.2.3 - 2026-06-24
 
 - Reject new database work as soon as a connection starts closing.

@@ -48,6 +48,46 @@ test('rejects multiple statements before calling the native module', () => {
   );
 });
 
+test('accepts CREATE TRIGGER bodies with internal semicolons', () => {
+  assert.doesNotThrow(() =>
+    assertSqlAndParameters(
+      `CREATE TRIGGER IF NOT EXISTS stock_movements_no_delete
+       BEFORE DELETE ON stock_movements
+       BEGIN
+         SELECT RAISE(ABORT, 'stock movements cannot be deleted');
+       END;`,
+      [],
+    ),
+  );
+
+  assert.doesNotThrow(() =>
+    assertSqlAndParameters(
+      `CREATE TEMP TRIGGER update_end_column
+       AFTER UPDATE ON items
+       BEGIN
+         UPDATE items SET end = NEW.end WHERE id = NEW.id;
+         SELECT CASE WHEN NEW.end IS NULL THEN RAISE(IGNORE) ELSE NEW.end END;
+       END`,
+      [],
+    ),
+  );
+});
+
+test('rejects SQL after a CREATE TRIGGER statement', () => {
+  assert.throws(
+    () =>
+      assertSqlAndParameters(
+        `CREATE TRIGGER item_audit
+         AFTER INSERT ON items
+         BEGIN
+           SELECT 1;
+         END; SELECT 2`,
+        [],
+      ),
+    /exactly one SQL statement/,
+  );
+});
+
 test('accepts validated BLOB parameters and rejects malformed base64', () => {
   assert.doesNotThrow(() =>
     assertSqlAndParameters('INSERT INTO files(data) VALUES (?)', [

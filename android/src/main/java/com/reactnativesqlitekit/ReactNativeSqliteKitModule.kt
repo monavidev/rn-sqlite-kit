@@ -6,7 +6,6 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteProgram
 import android.database.sqlite.SQLiteQuery
 import android.util.Base64
-import com.facebook.fbreact.specs.NativeReactNativeSqliteKitSpec
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import org.json.JSONArray
@@ -199,7 +198,7 @@ class ReactNativeSqliteKitModule(
       },
       sql,
       emptyArray<String>(),
-      null,
+      "",
     )
 
     cursor.use {
@@ -345,6 +344,11 @@ class ReactNativeSqliteKitModule(
   }
 
   private fun assertOneStatement(sql: String) {
+    if (isCreateTriggerStatement(sql)) {
+      assertSingleCreateTriggerStatement(sql)
+      return
+    }
+
     var index = 0
     var hasStatementContent = false
     var terminated = false
@@ -366,6 +370,11 @@ class ReactNativeSqliteKitModule(
           hasStatementContent = true
           index = skipBracketIdentifier(sql, index)
         }
+        isIdentifierStart(char) -> {
+          if (terminated) throw IllegalArgumentException("execute accepts exactly one SQL statement. Use transaction for a batch.")
+          hasStatementContent = true
+          index = readIdentifierEnd(sql, index)
+        }
         char == ';' -> {
           if (!hasStatementContent || terminated) {
             throw IllegalArgumentException("execute accepts exactly one SQL statement. Use transaction for a batch.")
@@ -382,6 +391,128 @@ class ReactNativeSqliteKitModule(
     }
 
     require(hasStatementContent) { "SQL must be a non-empty string." }
+  }
+
+  private fun assertSingleCreateTriggerStatement(sql: String) {
+    val end = findCreateTriggerEnd(sql)
+    if (end == -1 || !hasOnlyOptionalTerminator(sql, end)) {
+      throw IllegalArgumentException("execute accepts exactly one SQL statement. Use transaction for a batch.")
+    }
+  }
+
+  private fun isCreateTriggerStatement(sql: String): Boolean {
+    val keywords = firstKeywords(sql, 3)
+    return keywords.getOrNull(0) == "CREATE" &&
+      (keywords.getOrNull(1) == "TRIGGER" ||
+        ((keywords.getOrNull(1) == "TEMP" || keywords.getOrNull(1) == "TEMPORARY") &&
+          keywords.getOrNull(2) == "TRIGGER"))
+  }
+
+  private fun firstKeywords(sql: String, limit: Int): List<String> {
+    val keywords = mutableListOf<String>()
+    var index = 0
+
+    while (index < sql.length && keywords.size < limit) {
+      val char = sql[index]
+      val next = sql.getOrNull(index + 1)
+      when {
+        char.isWhitespace() -> index += 1
+        char == '-' && next == '-' -> index = skipLineComment(sql, index + 2)
+        char == '/' && next == '*' -> index = skipBlockComment(sql, index + 2)
+        isIdentifierStart(char) -> {
+          val end = readIdentifierEnd(sql, index)
+          keywords.add(sql.substring(index, end).uppercase(Locale.US))
+          index = end
+        }
+        else -> return keywords
+      }
+    }
+
+    return keywords
+  }
+
+  private fun findCreateTriggerEnd(sql: String): Int {
+    var index = 0
+    var inTriggerBody = false
+    var caseDepth = 0
+
+    while (index < sql.length) {
+      val char = sql[index]
+      val next = sql.getOrNull(index + 1)
+      when {
+        char.isWhitespace() -> index += 1
+        char == '-' && next == '-' -> index = skipLineComment(sql, index + 2)
+        char == '/' && next == '*' -> index = skipBlockComment(sql, index + 2)
+        char == '\'' || char == '"' || char == '`' -> index = skipQuoted(sql, index, char)
+        char == '[' -> index = skipBracketIdentifier(sql, index)
+        isIdentifierStart(char) -> {
+          val end = readIdentifierEnd(sql, index)
+          val keyword = sql.substring(index, end).uppercase(Locale.US)
+          val controlKeyword = isStandaloneControlKeyword(sql, index, end)
+
+          if (!inTriggerBody && keyword == "BEGIN" && controlKeyword) {
+            inTriggerBody = true
+          } else if (inTriggerBody && keyword == "CASE" && controlKeyword) {
+            caseDepth += 1
+          } else if (inTriggerBody && keyword == "END" && controlKeyword) {
+            if (caseDepth > 0) {
+              caseDepth -= 1
+            } else if (isTriggerEndBoundary(sql, end)) {
+              return end
+            }
+          }
+
+          index = end
+        }
+        else -> index += 1
+      }
+    }
+
+    return -1
+  }
+
+  private fun isStandaloneControlKeyword(sql: String, start: Int, end: Int): Boolean {
+    val previous = previousNonWhitespace(sql, start)
+    val next = skipTrivia(sql, end)
+
+    return previous != '.' &&
+      (next >= sql.length || (sql[next] != '.' && sql[next] != '='))
+  }
+
+  private fun previousNonWhitespace(sql: String, start: Int): Char {
+    var index = start - 1
+    while (index >= 0 && sql[index].isWhitespace()) index -= 1
+    return if (index >= 0) sql[index] else '\u0000'
+  }
+
+  private fun isTriggerEndBoundary(sql: String, index: Int): Boolean {
+    val next = skipTrivia(sql, index)
+    return next >= sql.length || sql[next] == ';'
+  }
+
+  private fun hasOnlyOptionalTerminator(sql: String, index: Int): Boolean {
+    var next = skipTrivia(sql, index)
+    if (next < sql.length && sql[next] == ';') {
+      next = skipTrivia(sql, next + 1)
+    }
+    return next >= sql.length
+  }
+
+  private fun skipTrivia(sql: String, start: Int): Int {
+    var index = start
+
+    while (index < sql.length) {
+      val char = sql[index]
+      val next = sql.getOrNull(index + 1)
+      index = when {
+        char.isWhitespace() -> index + 1
+        char == '-' && next == '-' -> skipLineComment(sql, index + 2)
+        char == '/' && next == '*' -> skipBlockComment(sql, index + 2)
+        else -> return index
+      }
+    }
+
+    return index
   }
 
   private fun countPositionalPlaceholders(sql: String): Int {
@@ -445,6 +576,12 @@ class ReactNativeSqliteKitModule(
   private fun isIdentifierStart(value: Char): Boolean = value == '_' || value.isLetter()
 
   private fun isIdentifierPart(value: Char): Boolean = isIdentifierStart(value) || value.isDigit()
+
+  private fun readIdentifierEnd(sql: String, start: Int): Int {
+    var index = start + 1
+    while (index < sql.length && isIdentifierPart(sql[index])) index += 1
+    return index
+  }
 
   private fun closeQuietly(database: SQLiteDatabase) {
     runCatching { database.close() }

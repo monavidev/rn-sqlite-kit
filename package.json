@@ -1,6 +1,6 @@
 {
   "name": "rn-sqlite-kit",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "A dependency-free SQLite TurboModule for React Native iOS and Android.",
   "keywords": [
     "react-native",
@@ -31,7 +31,9 @@
     }
   },
   "files": [
-    "android",
+    "android/src",
+    "android/build.gradle",
+    "android/gradle.properties",
     "ios",
     "src",
     "react-native-sqlite-kit.podspec",

@@ -90,3 +90,43 @@ test('public API rejects new work while a database is closing', async () => {
   finishClosing();
   await closing;
 });
+
+test('public API accepts a single CREATE TRIGGER statement with body semicolons', async () => {
+  const calls = [];
+  const kit = createSQLiteKit({
+    async open() { return 'c'; },
+    async close() { return true; },
+    async deleteDatabase() { return true; },
+    async execute(id, sql, paramsJson) {
+      calls.push(['execute', id, sql, paramsJson]);
+      return JSON.stringify({ rows: [], rowsAffected: 0, insertId: null });
+    },
+    async executeBatch() { return '[]'; },
+  });
+  const db = await kit.SQLite.open({ name: 'trigger.db' });
+  const sql = `CREATE TRIGGER IF NOT EXISTS stock_movements_no_delete
+    BEFORE DELETE ON stock_movements
+    BEGIN SELECT RAISE(ABORT, 'stock movements cannot be deleted'); END`;
+
+  await db.execute(sql);
+
+  assert.deepEqual(calls, [['execute', 'c', sql, '[]']]);
+});
+
+test('public API still rejects multiple SQL statements in execute', async () => {
+  const kit = createSQLiteKit({
+    async open() { return 'c'; },
+    async close() { return true; },
+    async deleteDatabase() { return true; },
+    async execute() {
+      return JSON.stringify({ rows: [], rowsAffected: 0, insertId: null });
+    },
+    async executeBatch() { return '[]'; },
+  });
+  const db = await kit.SQLite.open({ name: 'batch.db' });
+
+  await assert.rejects(
+    () => db.execute('SELECT 1; SELECT 2'),
+    /execute accepts exactly one SQL statement/,
+  );
+});

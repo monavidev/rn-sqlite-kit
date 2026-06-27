@@ -34,6 +34,11 @@ function assertSqlAndParameters(sql, params) {
  * additional SQL after it is not.
  */
 function assertSingleStatement(sql) {
+  if (isCreateTriggerStatement(sql)) {
+    assertSingleCreateTriggerStatement(sql);
+    return;
+  }
+
   let hasContent = false;
   let index = 0;
   let terminated = false;
@@ -75,6 +80,12 @@ function assertSingleStatement(sql) {
       continue;
     }
 
+    if (isIdentifierStart(char)) {
+      hasContent = true;
+      index = consumeIdentifier(sql, index);
+      continue;
+    }
+
     if (char === ';') {
       if (!hasContent) {
         throw new TypeError(
@@ -93,6 +104,151 @@ function assertSingleStatement(sql) {
   if (!hasContent) {
     throw new TypeError('SQL must be a non-empty string.');
   }
+}
+
+function assertSingleCreateTriggerStatement(sql) {
+  const end = findCreateTriggerEnd(sql);
+  if (end === -1 || !hasOnlyOptionalTerminator(sql, end)) {
+    throw new TypeError(
+      'execute accepts exactly one SQL statement. Use transaction for a batch.',
+    );
+  }
+}
+
+function isCreateTriggerStatement(sql) {
+  const keywords = firstKeywords(sql, 3);
+  return (
+    keywords[0] === 'CREATE' &&
+    (keywords[1] === 'TRIGGER' ||
+      ((keywords[1] === 'TEMP' || keywords[1] === 'TEMPORARY') &&
+        keywords[2] === 'TRIGGER'))
+  );
+}
+
+function firstKeywords(sql, limit) {
+  const keywords = [];
+  let index = 0;
+
+  while (index < sql.length && keywords.length < limit) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (/\s/.test(char)) {
+      index += 1;
+    } else if (char === '-' && next === '-') {
+      index = consumeLineComment(sql, index + 2);
+    } else if (char === '/' && next === '*') {
+      index = consumeBlockComment(sql, index + 2);
+    } else if (isIdentifierStart(char)) {
+      const end = consumeIdentifier(sql, index);
+      keywords.push(sql.slice(index, end).toUpperCase());
+      index = end;
+    } else {
+      break;
+    }
+  }
+
+  return keywords;
+}
+
+function findCreateTriggerEnd(sql) {
+  let index = 0;
+  let inTriggerBody = false;
+  let caseDepth = 0;
+
+  while (index < sql.length) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (/\s/.test(char)) {
+      index += 1;
+    } else if (char === '-' && next === '-') {
+      index = consumeLineComment(sql, index + 2);
+    } else if (char === '/' && next === '*') {
+      index = consumeBlockComment(sql, index + 2);
+    } else if (char === "'" || char === '"' || char === '`') {
+      index = consumeQuoted(sql, index, char);
+    } else if (char === '[') {
+      index = consumeBracketIdentifier(sql, index);
+    } else if (isIdentifierStart(char)) {
+      const end = consumeIdentifier(sql, index);
+      const keyword = sql.slice(index, end).toUpperCase();
+      const controlKeyword = isStandaloneControlKeyword(sql, index, end);
+
+      if (!inTriggerBody && keyword === 'BEGIN' && controlKeyword) {
+        inTriggerBody = true;
+      } else if (inTriggerBody && keyword === 'CASE' && controlKeyword) {
+        caseDepth += 1;
+      } else if (inTriggerBody && keyword === 'END' && controlKeyword) {
+        if (caseDepth > 0) {
+          caseDepth -= 1;
+        } else if (isTriggerEndBoundary(sql, end)) {
+          return end;
+        }
+      }
+
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+
+  return -1;
+}
+
+function isStandaloneControlKeyword(sql, start, end) {
+  const previous = previousNonWhitespace(sql, start);
+  const next = skipTrivia(sql, end);
+
+  return (
+    previous !== '.' &&
+    next < sql.length &&
+    sql[next] !== '.' &&
+    sql[next] !== '='
+  ) || (
+    previous !== '.' &&
+    next >= sql.length
+  );
+}
+
+function previousNonWhitespace(sql, start) {
+  let index = start - 1;
+  while (index >= 0 && /\s/.test(sql[index])) index -= 1;
+  return index >= 0 ? sql[index] : '';
+}
+
+function isTriggerEndBoundary(sql, index) {
+  const next = skipTrivia(sql, index);
+  return next >= sql.length || sql[next] === ';';
+}
+
+function hasOnlyOptionalTerminator(sql, index) {
+  index = skipTrivia(sql, index);
+  if (index < sql.length && sql[index] === ';') {
+    index = skipTrivia(sql, index + 1);
+  }
+  return index >= sql.length;
+}
+
+function skipTrivia(sql, start) {
+  let index = start;
+
+  while (index < sql.length) {
+    const char = sql[index];
+    const next = sql[index + 1];
+
+    if (/\s/.test(char)) {
+      index += 1;
+    } else if (char === '-' && next === '-') {
+      index = consumeLineComment(sql, index + 2);
+    } else if (char === '/' && next === '*') {
+      index = consumeBlockComment(sql, index + 2);
+    } else {
+      break;
+    }
+  }
+
+  return index;
 }
 
 function assertStatements(statements) {
@@ -224,6 +380,14 @@ function isDigit(value) {
 
 function isIdentifierStart(value) {
   return typeof value === 'string' && /[A-Za-z_]/.test(value);
+}
+
+function consumeIdentifier(sql, start) {
+  let index = start + 1;
+  while (index < sql.length && /[A-Za-z0-9_]/.test(sql[index])) {
+    index += 1;
+  }
+  return index;
 }
 
 module.exports = {
